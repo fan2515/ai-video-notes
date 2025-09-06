@@ -1,58 +1,68 @@
+// NoteGenerationService.java
 package com.fan.aivideonotes.service;
 
-
-import com.fan.aivideonotes.model.User;
-import com.fan.aivideonotes.repository.UserRepository;
+import com.fan.aivideonotes.controller.dto.VideoLinkRequest;
+import com.fan.aivideonotes.model.Note;
+import com.fan.aivideonotes.repository.NoteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
+import java.io.File;
 
 @Service
 public class NoteGenerationService {
 
-    private final List<AiServiceProvider> aiServiceProviders;
-    private final UserRepository userRepository;
+    private final AiServiceProvider geminiProvider;
+    private final NoteRepository noteRepository;
+    private final VideoProcessingService videoProcessingService;
 
     @Autowired
-    public NoteGenerationService(List<AiServiceProvider> aiServiceProviders, UserRepository userRepository) {
-        this.aiServiceProviders = aiServiceProviders;
-        this.userRepository = userRepository;
+    public NoteGenerationService(@Qualifier("geminiService") AiServiceProvider geminiProvider,
+                                 NoteRepository noteRepository,
+                                 VideoProcessingService videoProcessingService) {
+        this.geminiProvider = geminiProvider;
+        this.noteRepository = noteRepository;
+        this.videoProcessingService = videoProcessingService;
     }
 
-    @Async("taskExecutor") // 明确指定线程池，更规范
-    public void generateNotesForVideo(Long userId) {
-        // 模拟耗时操作
+    @Async("taskExecutor")
+    public void generateNotesForVideo(Long userId, String videoUrl, VideoLinkRequest.GenerationMode mode) {
+        System.out.println("--- Starting FINAL MULTIMODAL Pipeline Task with Mode: " + mode + " ---");
+        File videoFile = new File("test.mp4");
+        File audioFile = null;
+
         try {
-            // 模拟视频下载和音频提取
-            System.out.println("Starting video processing for user: " + userId);
-            Thread.sleep(5000); // 模拟5秒耗时
-            String transcript = "AI is a branch of computer science.";
-            System.out.println("Transcript extracted.");
+            if (!videoFile.exists()) {
+                throw new RuntimeException("FATAL: test.mp4 not found in project root.");
+            }
+            System.out.println("Step 1: Using local video file: " + videoFile.getAbsolutePath());
 
-            // --- 核心调度逻辑 ---
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+            audioFile = videoProcessingService.extractAudio(videoFile);
+            System.out.println("Step 2: Audio extracted successfully: " + audioFile.getAbsolutePath());
 
-            Optional<String> userApiKey = Optional.ofNullable(user.getOpenaiApiKey())
-                    .filter(key -> !key.isBlank());
+            String generatedNotes = ((GeminiService) geminiProvider).generateNotesFromAudio(audioFile, mode);
 
-            AiServiceProvider provider = aiServiceProviders.stream()
-                    .filter(p -> p.supports(userApiKey))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("No suitable AI service provider found for the given configuration."));
-
-            String generatedNotes = provider.generateNotes(transcript, userApiKey);
-
-            System.out.println("----- NOTES GENERATED -----");
+            System.out.println("----- NOTES GENERATED (Mode: " + mode + ") -----");
             System.out.println(generatedNotes);
-            System.out.println("---------------------------");
-            // TODO: Save notes to the database
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.err.println("Task was interrupted.");
+            System.out.println("------------------------------------");
+
+            Note note = new Note();
+            note.setUserId(userId);
+            note.setVideoUrl("local file: test.mp4");
+            note.setContent(generatedNotes);
+            Note savedNote = noteRepository.save(note);
+            System.out.println("Notes saved successfully with ID: " + savedNote.getId());
+
+        } catch (Exception e) {
+            System.err.println("An error occurred during the final pipeline: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            if (audioFile != null && audioFile.exists()) {
+                audioFile.delete();
+                System.out.println("Cleaned up temporary audio file: " + audioFile.getName());
+            }
         }
     }
 }

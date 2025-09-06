@@ -1,20 +1,28 @@
+// GeminiService.java (最终多模态版)
 package com.fan.aivideonotes.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fan.aivideonotes.controller.dto.VideoLinkRequest;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileCopyUtils;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,167 +30,120 @@ import java.util.Optional;
 @Service
 public class GeminiService implements AiServiceProvider {
 
-    private final RestTemplate restTemplate;
+    private final WebClient webClient;
     private final ResourceLoader resourceLoader;
+    private final ObjectMapper objectMapper;
     private final String promptTemplate;
 
-    // 从 application.properties 注入配置
     @Value("${app.api.gemini.key}")
     private String geminiApiKey;
+    @Value("${app.api.gemini.url.flash}")
+    private String geminiFlashApiUrl;
+    @Value("${app.api.gemini.url.pro}")
+    private String geminiProApiUrl;
 
-    @Value("${app.api.gemini.url}")
-    private String geminiApiUrl;
-
-
-    private final ObjectMapper objectMapper;
-
-    // 修改构造函数
-    public GeminiService(RestTemplate restTemplate, ResourceLoader resourceLoader, ObjectMapper objectMapper) {
-        this.restTemplate = restTemplate;
-        this.resourceLoader = resourceLoader;
-        this.objectMapper = objectMapper; // 注入 ObjectMapper
-        this.promptTemplate = loadPromptTemplate("classpath:prompts/notes_generation_prompt.txt");
+    public GeminiService(WebClient webClient, ResourceLoader resourceLoader, ObjectMapper objectMapper) {
+        this.webClient = webClient;
+        this.resourceLoader = resourceLoader; // 尽管不再直接用它加载，但保留注入是好习惯
+        this.objectMapper = objectMapper;
+        // 直接调用，不再传递参数
+        this.promptTemplate = loadPromptTemplate();
     }
 
-    // 替换 generateNotes 方法
-    @Override
-    public String generateNotes(String transcript, Optional<String> userApiKey) {
-        System.out.println("Executing Gemini Service with STREAMING request...");
+    public String generateNotesFromAudio(File audioFile, VideoLinkRequest.GenerationMode mode) {
+        System.out.println("Generating notes from audio using Base64 inline method...");
+        try {
+            // 1. 读取音频文件并进行 Base64 编码
+            byte[] fileContent = Files.readAllBytes(audioFile.toPath());
+            String encodedString = Base64.getEncoder().encodeToString(fileContent);
+            System.out.println("Audio file encoded to Base64. Length: " + encodedString.length());
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-goog-api-key", geminiApiKey);
+            // 2. 根据模式选择 API URL
+            String apiUrl = switch (mode) {
+                case PRO -> geminiProApiUrl;
+                default -> geminiFlashApiUrl;
+            };
+            System.out.println("Using generation mode: " + mode + " with URL: " + apiUrl);
 
-        String prompt = createPromptForNotes(transcript);
-        Map<String, Object> textPart = Map.of("text", prompt);
-        Map<String, Object> content = Map.of("parts", List.of(textPart));
+            // 3. 构建包含内联数据的请求体
+            Map<String, Object> inlineData = Map.of("inlineData", Map.of("mimeType", "audio/mpeg", "data", encodedString));
+            Map<String, Object> textData = Map.of("text", promptTemplate);
+            Map<String, Object> content = Map.of("parts", List.of(textData, inlineData));
+            Map<String, Object> requestBody = Map.of("contents", List.of(content));
+
+            // 4. 发送请求
+            String response = webClient.post()
+                    .uri(apiUrl)
+                    .header("X-goog-api-key", geminiApiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            return parseGeminiResponse(response);
+
+        } catch (Exception e) {
+            System.err.println("Error in Gemini Base64 process: " + e.getMessage());
+            throw new RuntimeException("Failed to generate notes from audio via Base64", e);
+        }
+    }
+
+    // generateContent 方法需要用 WebClient 重写
+    private String generateContent(String fileName, String apiUrl) throws IOException {
+        Map<String, Object> fileData = Map.of("fileData", Map.of("mimeType", "audio/mpeg", "name", fileName));
+        Map<String, Object> textData = Map.of("text", promptTemplate);
+        Map<String, Object> content = Map.of("parts", List.of(textData, fileData));
         Map<String, Object> requestBody = Map.of("contents", List.of(content));
 
+        String response = webClient.post()
+                .uri(apiUrl)
+                .header("X-goog-api-key", geminiApiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        return parseGeminiResponse(response);
+    }
+
+    private String parseGeminiResponse(String jsonResponse) throws IOException {
+        if (jsonResponse == null || jsonResponse.isEmpty()) {
+            return "Error: Empty response from Gemini.";
+        }
+        JsonNode root = objectMapper.readTree(jsonResponse);
+        String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("Error: 'text' field not found.");
+        return text;
+    }
+
+    private String loadPromptTemplate() {
         try {
-            StringBuilder fullResponse = new StringBuilder();
-            restTemplate.execute(geminiApiUrl, HttpMethod.POST, request -> {
-                request.getHeaders().putAll(headers);
-                try (OutputStream os = request.getBody()) {
-                    // 使用 ObjectMapper 将 Map 写入输出流，这是正确的做法
-                    objectMapper.writeValue(os, requestBody);
-                }
-            }, response -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
-                    String line;
-                    System.out.println("--- Streaming Response Started ---");
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println("Received chunk: " + line); // 实时打印收到的每个数据块
-                        fullResponse.append(line).append("\n");
-                    }
-                    System.out.println("--- Streaming Response Ended ---");
-                }
-                return null;
-            });
+            // --- START: 核心修改 ---
+            // 我们不再使用 location 参数，而是直接在这里硬编码 ClassPathResource
+            // 这能确保 Spring 总是从 src/main/resources 下去查找，而不会用错加载器
+            Resource resource = new ClassPathResource("prompts/notes_generation_prompt_multimodal.txt");
+            // --- END: 核心修改 ---
 
-            return parseStreamingResponse(fullResponse.toString());
+            if (!resource.exists()) {
+                throw new IOException("Prompt template not found at: " + "prompts/notes_generation_prompt_multimodal.txt");
+            }
 
-        } catch (Exception e) {
-            System.err.println("Error calling Gemini Streaming API: " + e.getMessage());
-            return "Error: Failed to generate notes from Gemini. Details: " + e.getMessage();
+            try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
+                return FileCopyUtils.copyToString(reader);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load prompt template", e);
         }
     }
 
-    // 新增一个方法来解析流式响应
-    private String parseStreamingResponse(String rawResponse) {
-        StringBuilder contentBuilder = new StringBuilder();
-        try {
-            // 1. 将整个原始响应字符串，解析成一个包含 Map 对象的 List
-            //    每个 Map 对象就代表我们收到的一个数据块 (chunk)
-            List<Map<String, Object>> chunks = objectMapper.readValue(rawResponse, new TypeReference<>() {});
-
-            // 2. 遍历每一个数据块
-            for (Map<String, Object> chunk : chunks) {
-                // 3. 按照 JSON 结构，一层一层地往下找，直到找到 "text"
-                //    这比正则表达式健壮得多！
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) chunk.get("candidates");
-                if (candidates != null && !candidates.isEmpty()) {
-                    Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
-                    if (content != null) {
-                        List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
-                        if (parts != null && !parts.isEmpty()) {
-                            String textChunk = (String) parts.get(0).get("text");
-                            if (textChunk != null) {
-                                contentBuilder.append(textChunk);
-                            }
-                        }
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            System.err.println("Error parsing streaming JSON response: " + e.getMessage());
-            return "Error: Could not parse content from streaming response. Raw data: " + rawResponse;
-        }
-
-        if (contentBuilder.isEmpty()) {
-            return "Error: No text content found in streaming response.";
-        }
-
-        // 4. 返回最终拼接好的、干净的完整内容
-        return contentBuilder.toString();
+    @Override
+    public String generateNotes(String transcript, Optional<String> userApiKey) {
+        throw new UnsupportedOperationException("Use generateNotesFromAudio for multimodal generation.");
     }
 
     @Override
     public boolean supports(Optional<String> userApiKey) {
         return userApiKey.isEmpty();
     }
-
-    private String createPromptForNotes(String transcript) {
-        return String.format(promptTemplate, transcript);
-    }
-
-    private String loadPromptTemplate(String location) {
-        try {
-            Resource resource = resourceLoader.getResource(location);
-            try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
-                return FileCopyUtils.copyToString(reader);
-            }
-        } catch (IOException e) {
-            System.err.println("FATAL: Could not load prompt template from " + location);
-            throw new IllegalStateException("Failed to load prompt template", e);
-        }
-    }
-
-    private String parseGeminiResponse(String jsonResponse) {
-        if (jsonResponse == null || jsonResponse.isEmpty()) {
-            return "Error: Empty response from Gemini.";
-        }
-
-        System.out.println("\n===== RAW RESPONSE FROM GEMINI START =====");
-        System.out.println(jsonResponse);
-        System.out.println("===== RAW RESPONSE FROM GEMINI END =====\n");
-
-        try {
-            // 这是一个更健壮的解析方法，它会找到第一个 "text": "..." 的内容
-            String searchText = "\"text\": \"";
-            int startIndex = jsonResponse.indexOf(searchText);
-            if (startIndex == -1) {
-                return "Error: Cannot find 'text' field in Gemini's response.";
-            }
-
-            startIndex += searchText.length();
-
-            int endIndex = jsonResponse.indexOf("\"", startIndex);
-            if (endIndex == -1) {
-                return "Error: Cannot find closing quote for 'text' field.";
-            }
-
-            String extractedText = jsonResponse.substring(startIndex, endIndex);
-
-            // 清理转义字符
-            return extractedText.replace("\\n", "\n")
-                    .replace("\\\"", "\"")
-                    .replace("\\t", "\t");
-
-        } catch (Exception e) {
-            return "Error: Exception while parsing Gemini's response. Details: " + e.getMessage();
-        }
-    }
 }
-
-
