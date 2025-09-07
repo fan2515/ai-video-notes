@@ -1,5 +1,6 @@
 package com.fan.aivideonotes.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -20,6 +21,7 @@ public class Note {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 
     @PrePersist

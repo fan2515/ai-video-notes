@@ -1,5 +1,6 @@
 package com.fan.aivideonotes.controller;
 
+import com.fan.aivideonotes.controller.dto.NoteDto;
 import com.fan.aivideonotes.controller.dto.TaskResponse;
 import com.fan.aivideonotes.controller.dto.VideoLinkRequest;
 import com.fan.aivideonotes.model.Note;
@@ -37,8 +38,16 @@ public class NoteController {
 
     // 这个【新】接口用来【查询】笔记
     @GetMapping("/{noteId}")
-    public ResponseEntity<Note> getNoteById(@PathVariable Long noteId) {
+    public ResponseEntity<NoteDto> getNoteById(@PathVariable Long noteId) { // 返回类型改为 NoteDto
         return noteRepository.findById(noteId)
+                .map(note -> { // 使用 .map 进行转换
+                    NoteDto dto = new NoteDto();
+                    dto.setId(note.getId());
+                    dto.setVideoUrl(note.getVideoUrl());
+                    dto.setContent(note.getContent());
+                    dto.setCreatedAt(note.getCreatedAt());
+                    return dto;
+                })
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
