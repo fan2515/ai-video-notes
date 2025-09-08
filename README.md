@@ -1,83 +1,98 @@
 # AI 视频笔记生成器 (AI Video Notes Generator)
 
-这是一个基于 Java 21 和 Spring Boot 3 构建的高性能后端服务，能够根据视频内容，通过多模态 AI 模型自动生成结构化的学习笔记。
+[![Java](https://img.shields.io/badge/Java-21-blue.svg)](https://www.java.com)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🏛️ 系统架构 (System Architecture)
+这是一个基于 Java 21 和 Spring Boot 3 构建的高性能后端服务，能够根据在线视频内容（当前支持 YouTube），通过多模态 AI 模型自动生成结构化的学习笔记。
+
+**[查看项目第一阶段 OneNote 报告](https://github.com/fan2515/ai-video-notes/blob/main/docs/Phase1_Report.md)** | **[查看项目第二阶段 OneNote 报告](https://github.com/fan2515/ai-video-notes/blob/main/docs/Phase2_Report.md)**
+
+---
+
+### 🚀 演示 (Demo)
+
+*插件成功触发后端，处理在线视频并生成笔记的控制台日志：*
+
+![Demo Log](docs/images/success_log.png)
+
+*插件界面：*
+
+![Extension UI](docs/images/extension_ui.png)
+
+---
+
+### 🏛️ 系统架构 (System Architecture)
 
 ![系统架构图](docs/images/architecture.png)
 
-## 🚀 项目亮点 (Features)
+---
+
+### ✨ 项目亮点 (Features)
 
 *   **现代化技术栈**: 采用 **Java 21 + Spring Boot 3**，并开启**虚拟线程 (Virtual Threads)** 以极低的资源消耗支持高并发 I/O 操作。
-*   **端到端自动化**: 实现了从 `API 请求` -> `音频提取` -> `AI 分析` -> `数据持久化` -> `结果查询` 的全自动化处理流程。
+*   **端到端自动化**: 实现了从 `API 请求` -> `在线视频下载` -> `音频提取` -> `多模态 AI 分析` -> `数据持久化` -> `结果查询` 的全自动化处理流程。
 *   **前沿多模态 AI 集成**: 成功对接 **Google Gemini 1.5**，实现了直接处理**音频文件**生成笔记的**多模态**能力，架构更简洁、高效。
 *   **动态模型选择**: 后端支持根据 API 请求参数，在 **`Flash` (高速) 模型**和 **`Pro` (高质量) 模型**之间动态切换，兼顾了响应速度与分析质量。
-*   **健壮的外部进程控制**: 稳定集成 **`ffmpeg`**，并构建了包含日志重定向和错误处理的健壮的外部命令执行框架。
+*   **健壮的外部系统集成**: 稳定集成 **`yt-dlp`** 和 **`ffmpeg`**，并通过**外部化 Cookies** 的方式解决了 YouTube 复杂的反爬虫验证问题。
 *   **专业的工程实践**:
-    *   **配置安全**: 所有敏感信息（API Key, 密码）均通过**环境变量**管理，代码库中无任何硬编码凭证。
-    *   **Prompt 工程**: 将 Prompt 内容**从业务代码中分离**至外部模板文件，实现了业务逻辑与 AI 指令的解耦，便于快速迭代和优化。
-    *   **异步处理**: 核心业务流程采用 `@Async` 实现**完全异步化**，确保 API 接口能够瞬时响应。
-    *   **API 设计**: 提供了 RESTful 风格的 API，并通过 **DTO (Data Transfer Objects)** 模式实现了前后端的数据解耦。
+    *   **配置安全**: 所有敏感信息（API Key）均通过**环境变量**管理。
+    *   **Prompt 工程**: 将 Prompt **从业务代码中分离**至外部模板文件，便于快速迭代。
+    *   **异步处理**: 核心业务流程采用 `@Async` 实现**完全异步化**。
+    *   **API 设计**: 提供了 RESTful 风格的 API，并通过 **DTO** 模式实现了前后端的数据解耦。
+    *   **全栈交互**: 配备了一个**浏览器插件**原型，用于触发后端服务，展示了全栈应用的设计思路。
 
-## 🛠️ 技术栈 (Tech Stack)
+---
 
-*   **后端**: Spring Boot, Spring WebFlux (`WebClient`), Spring Data JPA
+### 🛠️ 技术栈 (Tech Stack)
+
+*   **后端**: Spring Boot, Spring Data JPA
 *   **语言**: Java 21
 *   **AI 模型**: Google Gemini 1.5 Pro / Flash (多模态)
-*   **媒体处理**: FFmpeg
-*   **数据库**: H2 (开发阶段), PostgreSQL (生产环境)
+*   **媒体处理**: yt-dlp, FFmpeg
+*   **数据库**: H2 (开发阶段)
 *   **构建工具**: Maven
+*   **前端原型**: Chrome/Edge Extension (HTML, CSS, JavaScript)
 *   **其他**: Lombok, Jackson, Jasypt
 
-## 🏁 已完成里程碑 (Milestones Achieved)
+---
 
-*   **[✓] 阶段一: 核心链路验证**
-    *   完成项目基础框架搭建。
-    *   成功对接 Google Gemini API 的纯文本接口。
-    *   解决了复杂的本地开发环境网络代理和依赖兼容性问题。
-*   **[✓] 阶段二: 真实流程实现**
-    *   成功集成 `ffmpeg` 实现从本地视频文件提取音频。
-    *   将 AI 调用升级为**多模态处理**，直接分析音频文件。
-    *   实现了笔记结果的**数据库持久化**和**API 查询**功能。
-    *   完成了项目的**精加工**，包括美化 API 响应、创建 DTO 和完善文档。
+### 🚀 快速开始 (Quick Start)
 
-## 🚀 未来计划 (Future Roadmap)
+1.  **环境准备**
+    *   安装 JDK 21
+    *   安装 Maven
+    *   安装 `yt-dlp` 和 `ffmpeg`，并确保它们在系统环境变量 `Path` 中。
+    *   安装 Chrome 或 Edge 浏览器，并安装 `Get cookies.txt LOCALLY` 插件。
 
-*   **[ ] 阶段三: 真实数据源 & 质量保障**
-    *   集成 `yt-dlp` 以支持从在线视频链接（如 YouTube）自动下载和处理。
-    *   编写 **JUnit 5 和 Mockito 单元测试**，确保核心业务逻辑的稳定可靠。
-*   **[ ] 阶段四: 迈向全栈**
-    *   开发一个 **Chrome/Edge 浏览器插件**作为前端，实现一键式交互，提供极致的用户体验。
-
-## 快速开始 (Quick Start)
-
-1.  **克隆仓库**
+2.  **克隆仓库**
     ```bash
     git clone https://github.com/fan2515/ai-video-notes.git
     cd ai-video-notes
     ```
-2.  **准备素材**
-    *   在项目根目录下放置一个名为 `test.mp4` 的视频文件。
 
-3.  **配置环境变量**
-    *   在 IntelliJ IDEA 的运行配置中，设置以下环境变量：
-        *   `GEMINI_API_KEY`: 你的 Google Gemini API Key。
-        *   `JASYPT_ENCRYPTOR_PASSWORD`: 用于配置加密的自定义密码。
+3.  **准备 Cookies 文件**
+    *   登录 YouTube，使用 `Get cookies.txt LOCALLY` 插件导出一个 **Netscape 格式** 的 Cookies 文件。
+    *   将该文件的内容复制到项目根目录下的 `manual-cookies.txt` 文件中。
 
-4.  **配置网络代理 (如果需要)**
-    *   在 `AiVideoNotesApplication.java` 的 `webClient()` Bean 中，修改代理的主机和端口。
+4.  **配置环境变量**
+    *   在 IntelliJ IDEA 的运行配置中，设置 `GEMINI_API_KEY`。
 
-5.  **运行项目**
+5.  **运行后端服务**
     *   直接运行 `AiVideoNotesApplication.java` 主类。
 
-6.  **测试 API**
-    *   **创建笔记 (POST):**
+6.  **加载浏览器插件**
+    *   打开浏览器扩展程序页面 (`chrome://extensions`)，启用开发者模式。
+    *   点击“加载已解压的扩展程序”，选择项目中的 `chrome-extension` 文件夹。
+
+7.  **开始使用！**
+    *   打开任意 YouTube 视频页面，点击插件图标，点击“生成笔记”。
+    *   任务完成后，通过以下 API 查询结果（其中 `{noteId}` 为后端日志中打印的 ID）：
       ```bash
-      curl -X POST http://localhost:8080/api/notes/generate \
-      -H "Content-Type: application/json" \
-      -d '{"userId": 1, "url": "local-test", "mode": "FLASH"}'
+      GET http://localhost:8080/api/notes/{noteId}
       ```
-    *   **查询笔记 (GET):**
-      ```bash
-      curl http://localhost:8080/api/notes/{noteId}
-      ```
+
+---
+### 许可证 (License)
+
+本项目采用 [MIT License](LICENSE)。
