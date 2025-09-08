@@ -11,6 +11,8 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.transport.ProxyProvider;
 
@@ -28,32 +30,42 @@ public class AiVideoNotesApplication {
 
 
 
+    // 1. RestTemplate Bean (带代理和超时)
     @Bean
-    @Primary // 告诉 Spring Boot 优先使用我们这个自定义的 Bean
+    public RestTemplate restTemplate() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        String proxyHost = "127.0.0.1";
+        int proxyPort = 7897;
+        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+        requestFactory.setProxy(proxy);
+        requestFactory.setConnectTimeout(10000);
+        requestFactory.setReadTimeout(60000);
+        System.out.println("!!! RestTemplate is configured with proxy and timeouts !!!");
+        return new RestTemplate(requestFactory);
+    }
+
+    // 2. ObjectMapper Bean (带 JSR310 模块)
+    @Bean
+    @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
-        // 注册 JavaTimeModule 模块
         objectMapper.registerModule(new JavaTimeModule());
         System.out.println("!!! Custom ObjectMapper with JavaTimeModule has been configured. !!!");
         return objectMapper;
     }
 
+    // 3. CORS 配置 Bean
     @Bean
-    public WebClient webClient() {
-        // 配置代理
-        String proxyHost = "127.0.0.1";
-        int proxyPort = 7897;
-
-        HttpClient httpClient = HttpClient.create()
-                .proxy(proxy -> proxy.type(ProxyProvider.Proxy.HTTP)
-                        .host(proxyHost)
-                        .port(proxyPort));
-
-        System.out.println("!!! WebClient is configured to use proxy: " + proxyHost + ":" + proxyPort + " !!!");
-
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**")
+                        .allowedOrigins("*")
+                        .allowedMethods("*")
+                        .allowedHeaders("*");
+            }
+        };
     }
 
 }
