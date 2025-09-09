@@ -1,6 +1,8 @@
 package com.fan.aivideonotes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.hibernate6.Hibernate6Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -49,8 +51,17 @@ public class AiVideoNotesApplication {
     @Primary
     public ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
+
+        // 1. 注册 JavaTimeModule (解决 LocalDateTime 问题)
         objectMapper.registerModule(new JavaTimeModule());
-        System.out.println("!!! Custom ObjectMapper with JavaTimeModule has been configured. !!!");
+
+        // 2. 【新增】注册 Hibernate6Module (解决懒加载代理问题)
+        objectMapper.registerModule(new Hibernate6Module());
+
+        // 3. 禁用将日期写成时间戳的行为
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        System.out.println("!!! Custom ObjectMapper with JavaTimeModule AND Hibernate6Module has been configured. !!!");
         return objectMapper;
     }
 

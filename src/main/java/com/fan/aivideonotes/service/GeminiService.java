@@ -98,11 +98,28 @@ public class GeminiService implements AiServiceProvider {
 
     private String parseGeminiResponse(String jsonResponse) throws IOException {
         if (jsonResponse == null || jsonResponse.isEmpty()) {
-            return "Error: Empty response from Gemini.";
+            throw new IOException("Empty response from Gemini.");
         }
+
+        System.out.println("===== RAW RESPONSE FROM GEMINI (Base64) =====");
+        System.out.println(jsonResponse);
+        System.out.println("=============================================");
+
         JsonNode root = objectMapper.readTree(jsonResponse);
-        String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("Error: 'text' field not found.");
-        return text;
+
+        // 1. 优先检查是否存在 error 字段
+        if (root.has("error")) {
+            throw new IOException("Gemini API returned an error: " + root.get("error").toString());
+        }
+
+        // 2. 检查我们期望的路径是否存在
+        JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
+
+        if (textNode.isMissingNode() || !textNode.isTextual()) {
+            throw new IOException("Could not find 'text' field in a valid Gemini response.");
+        }
+
+        return textNode.asText();
     }
 
     @Override

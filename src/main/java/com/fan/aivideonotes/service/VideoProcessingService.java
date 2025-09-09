@@ -19,23 +19,19 @@ public class VideoProcessingService {
      * @param videoUrl 视频的 URL (例如 YouTube 链接)
      * @return 下载好的视频文件对象
      */
+    // 在 VideoProcessingService.java 中
+
     public File downloadVideo(String videoUrl) {
         try {
             Path tempDir = Files.createTempDirectory("video-processing-" + UUID.randomUUID());
-            System.out.println("Created temporary directory: " + tempDir);
+            System.out.println("Created temporary directory for download: " + tempDir);
 
-            String cookiesFilePath = "D:/document/2025_05_11_Code/ai-video-notes/manual-cookies.txt";
-            File cookiesFile = new File(cookiesFilePath);
+            // --- 终极简化版：无 Cookies 下载 (专为 Bilibili 等网站设计) ---
 
-            if (!cookiesFile.exists() || cookiesFile.length() == 0) {
-                throw new IOException("Netscape format cookies file not found or is empty at: " + cookiesFilePath);
-            }
-
-            System.out.println("Attempting to download using --cookies with Netscape format file: " + cookiesFilePath);
+            System.out.println("Attempting to download a video without cookies: " + videoUrl);
 
             ProcessBuilder processBuilder = new ProcessBuilder(
                     "yt-dlp",
-                    "--cookies", cookiesFilePath, // <-- 确认是这个参数
                     "-o", tempDir.resolve("%(title)s.%(ext)s").toString(),
                     "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                     "--max-filesize", "500m",
@@ -49,7 +45,7 @@ public class VideoProcessingService {
             System.err.println("!!!!!! DETAILED DOWNLOAD ERROR !!!!!!");
             e.printStackTrace();
             System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-            throw new RuntimeException("Failed to download video. Please check your 'manual-cookies.txt' (Netscape format).", e);
+            throw new RuntimeException("Failed to download video from the provided URL.", e);
         }
     }
 

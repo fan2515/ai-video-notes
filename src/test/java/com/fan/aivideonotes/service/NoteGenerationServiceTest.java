@@ -2,7 +2,9 @@ package com.fan.aivideonotes.service;
 
 import com.fan.aivideonotes.controller.dto.VideoLinkRequest;
 import com.fan.aivideonotes.model.Note;
+import com.fan.aivideonotes.model.Task;
 import com.fan.aivideonotes.repository.NoteRepository;
+import com.fan.aivideonotes.repository.TaskRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -10,75 +12,72 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.File;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class NoteGenerationServiceTest {
 
     @Test
-    void generateNotesForVideo_shouldSaveNote_whenSuccessful() {
+    void generateNotesForVideo_shouldUpdateTaskToCompleted_whenSuccessful() {
         // --- 1. Arrange (准备阶段) ---
 
-        // 手动创建所有的 Mock (假) 对象
+        // 手动创建所有的 Mock 对象
         GeminiService mockGeminiService = Mockito.mock(GeminiService.class);
         NoteRepository mockNoteRepository = Mockito.mock(NoteRepository.class);
         VideoProcessingService mockVideoProcessingService = Mockito.mock(VideoProcessingService.class);
+        TaskRepository mockTaskRepository = Mockito.mock(TaskRepository.class); // 新增 TaskRepository Mock
 
-        // ======================= START: 核心修改 =======================
-        // 手动创建被测试的对象，直接传入 mockGeminiService
-        // 因为 GeminiService 实现了 AiServiceProvider，所以类型是匹配的
+        // 手动创建被测试的实例
         NoteGenerationService noteGenerationService = new NoteGenerationService(
-                mockGeminiService, // <-- 直接传递单个 Mock 对象，不再创建 List
+                mockGeminiService,
                 mockNoteRepository,
-                mockVideoProcessingService
+                mockVideoProcessingService,
+                mockTaskRepository // 传入新的 Mock 对象
         );
-        // ======================= END: 核心修改 =======================
 
-        // 定义我们期望的输入
+        // 定义输入
+        String taskId = "test-task-123";
         Long userId = 1L;
         String videoUrl = "https://example.com/video.mp4";
         VideoLinkRequest.GenerationMode mode = VideoLinkRequest.GenerationMode.FLASH;
 
-        // 准备假的 File 对象
-        File mockAudioFile = new File("test.mp3");
+        // 准备 Mock 对象的行为
+        when(mockVideoProcessingService.downloadVideo(anyString())).thenReturn(new File("fake-video.mp4"));
+        when(mockVideoProcessingService.extractAudio(any(File.class))).thenReturn(new File("fake-audio.mp3"));
+        when(mockGeminiService.generateNotesFromAudio(any(File.class), any())).thenReturn("{\"title\":\"Test\"}");
 
-        // 准备假的 AI 生成结果
-        String fakeGeneratedNotes = "{\"title\":\"测试笔记\"}";
+        Note savedNote = new Note();
+        savedNote.setId(1L);
+        when(mockNoteRepository.save(any(Note.class))).thenReturn(savedNote);
 
-        // 准备假的数据库保存后的 Note 对象
-        Note fakeSavedNote = new Note();
-        fakeSavedNote.setId(99L);
-
-        // "录制" Mock 对象的行为：
-        when(mockVideoProcessingService.extractAudio(any(File.class))).thenReturn(mockAudioFile);
-        when(mockGeminiService.generateNotesFromAudio(any(File.class), any(VideoLinkRequest.GenerationMode.class)))
-                .thenReturn(fakeGeneratedNotes);
-        when(mockNoteRepository.save(any(Note.class))).thenReturn(fakeSavedNote);
+        // 关键：当 Service 尝试查找 Task 时，让它能找到一个
+        Task initialTask = new Task();
+        initialTask.setId(taskId);
+        when(mockTaskRepository.findById(taskId)).thenReturn(Optional.of(initialTask));
 
 
         // --- 2. Act (执行阶段) ---
-
-        // 调用我们要测试的方法
-        noteGenerationService.generateNotesForVideo(userId, videoUrl, mode);
+        noteGenerationService.generateNotesForVideo(taskId, userId, videoUrl, mode);
 
 
         // --- 3. Assert (断言/验证阶段) ---
 
-        // 验证 noteRepository.save 方法是否被确切地调用了 1 次
-        verify(mockNoteRepository).save(any(Note.class));
+        // 验证 taskRepository.save 被调用了多次（至少两次，一次是更新状态，一次是最终完成）
+        verify(mockTaskRepository, atLeast(2)).save(any(Task.class));
 
-        // 捕获传递给 save 方法的 Note 对象
-        ArgumentCaptor<Note> noteCaptor = ArgumentCaptor.forClass(Note.class);
-        verify(mockNoteRepository).save(noteCaptor.capture());
+        // 捕获最后一次传递给 taskRepository.save 的 Task 对象
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(mockTaskRepository, atLeastOnce()).save(taskCaptor.capture());
 
-        Note capturedNote = noteCaptor.getValue();
+        Task finalTask = taskCaptor.getValue();
 
-        // 验证被保存的 Note 对象的内容是否符合我们的预期
-        assertEquals(userId, capturedNote.getUserId());
-        assertEquals(fakeGeneratedNotes, capturedNote.getContent());
+        // 验证最终的任务状态是否为 "COMPLETED"
+        assertEquals("COMPLETED", finalTask.getStatus());
+        // 验证最终的 Note 是否被关联上了
+        assertEquals(savedNote, finalTask.getResultNote());
     }
 }
