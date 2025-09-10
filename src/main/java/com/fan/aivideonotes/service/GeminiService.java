@@ -106,20 +106,25 @@ public class GeminiService implements AiServiceProvider {
         System.out.println("=============================================");
 
         JsonNode root = objectMapper.readTree(jsonResponse);
-
-        // 1. 优先检查是否存在 error 字段
-        if (root.has("error")) {
-            throw new IOException("Gemini API returned an error: " + root.get("error").toString());
-        }
-
-        // 2. 检查我们期望的路径是否存在
         JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
 
         if (textNode.isMissingNode() || !textNode.isTextual()) {
             throw new IOException("Could not find 'text' field in a valid Gemini response.");
         }
 
-        return textNode.asText();
+        String rawText = textNode.asText();
+
+        // --- START: 新增的清理逻辑 ---
+        System.out.println("Cleaning raw text from AI...");
+
+        // 移除开头和结尾的 Markdown 代码块符号 ```json 和 ```
+        // 使用正则表达式来匹配，更健壮
+        String cleanedText = rawText.replaceAll("(?s)^```json\\s*", "").replaceAll("(?s)```\\s*$", "");
+
+        System.out.println("Cleaned JSON content ready to be saved.");
+        // --- END: 新增的清理逻辑 ---
+
+        return cleanedText; // 返回清理后的、纯净的 JSON 字符串
     }
 
     @Override

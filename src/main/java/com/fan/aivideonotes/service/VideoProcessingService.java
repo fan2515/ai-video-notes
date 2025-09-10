@@ -32,6 +32,7 @@ public class VideoProcessingService {
 
             ProcessBuilder processBuilder = new ProcessBuilder(
                     "yt-dlp",
+                    "--no-playlist",
                     "-o", tempDir.resolve("%(title)s.%(ext)s").toString(),
                     "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
                     "--max-filesize", "500m",

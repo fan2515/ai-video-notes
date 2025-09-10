@@ -4,27 +4,30 @@
     <title>AI Video Notes</title>
     <meta charset="UTF-8">
     <style>
-        body {
-            width: 250px;
-            font-family: sans-serif;
-            text-align: center;
-        }
-        button {
-            width: 80%;
-            padding: 10px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        #status {
-            margin-top: 15px;
-            font-weight: bold;
-        }
+        body { width: 350px; font-family: sans-serif; padding: 10px; }
+        h3 { text-align: center; }
+        button { width: 100%; padding: 10px; font-size: 16px; cursor: pointer; margin-bottom: 15px; }
+        #status { font-weight: bold; text-align: center; margin-bottom: 15px; }
+        #resultContainer { border-top: 1px solid #ccc; padding-top: 10px; display: none; } /* 默认隐藏 */
+        #noteTitle { font-size: 1.1em; font-weight: bold; margin-bottom: 5px; }
+        #noteSummary { font-size: 0.9em; margin-bottom: 10px; }
+        .topic { font-weight: bold; margin-top: 10px; }
+        ul { padding-left: 20px; margin: 5px 0; }
+        li { font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h3>AI 视频笔记助手</h3>
-    <button id="generateButton">生成笔记</button>
-    <div id="status"></div>
-    <script src="popup.js"></script>
+<h3>AI 视频笔记助手</h3>
+<button id="generateButton">生成笔记</button>
+<div id="status"></div>
+
+<!-- 新增的结果展示区域 -->
+<div id="resultContainer">
+    <h4 id="noteTitle"></h4>
+    <p id="noteSummary"></p>
+    <div id="detailedNotes"></div>
+</div>
+
+<script src="popup.js"></script>
 </body>
 </html>

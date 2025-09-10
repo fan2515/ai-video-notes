@@ -8,7 +8,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "*://*.youtube.com/*"
+    "*://*.youtube.com/*",
+    "*://*.bilibili.com/video/*"
   ],
   "action": {
     "default_popup": "popup.html",
