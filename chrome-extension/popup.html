@@ -1,32 +1,140 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Video Notes</title>
+    <title>AI 视频笔记助手</title>
     <meta charset="UTF-8">
     <style>
-        body { width: 350px; font-family: sans-serif; padding: 10px; }
-        h3 { text-align: center; }
-        button { width: 100%; padding: 10px; font-size: 16px; cursor: pointer; margin-bottom: 15px; }
-        #status { font-weight: bold; text-align: center; margin-bottom: 15px; }
-        #resultContainer { border-top: 1px solid #ccc; padding-top: 10px; display: none; } /* 默认隐藏 */
-        #noteTitle { font-size: 1.1em; font-weight: bold; margin-bottom: 5px; }
-        #noteSummary { font-size: 0.9em; margin-bottom: 10px; }
-        .topic { font-weight: bold; margin-top: 10px; }
-        ul { padding-left: 20px; margin: 5px 0; }
-        li { font-size: 0.9em; }
+        /* 基础样式 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex; /* 使用 Flexbox 布局 */
+            flex-direction: column; /* 垂直排列 */
+            background-color: #f9f9f9;
+        }
+
+        .container {
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            box-sizing: border-box; /* 让 padding 不会撑大容器 */
+        }
+
+        h3 { text-align: center; color: #333; margin-top: 10px; }
+        button { width: 100%; padding: 10px; font-size: 16px; cursor: pointer; margin-bottom: 15px; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.2s; flex-shrink: 0; /* 防止按钮被压缩 */ }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        #status { font-weight: bold; text-align: center; margin-bottom: 15px; color: #555; min-height: 20px; flex-shrink: 0; /* 防止状态栏被压缩 */ }
+
+        /* 结果容器样式优化 */
+        #resultContainer {
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            display: none;
+            flex-grow: 1; /* 【核心】让此容器占据所有剩余的垂直空间 */
+            overflow-y: auto; /* 当内容超出时，只在此容器内部出现滚动条 */
+        }
+
+        /* 笔记内容样式 */
+        #notes-content { line-height: 1.6; color: #333; }
+        #notes-content h2 { font-size: 1.1em; color: #0056b3; border-bottom: 2px solid #007bff; padding-bottom: 4px; margin-top: 15px; margin-bottom: 10px; }
+        #notes-content p { margin: 8px 0; }
+        #notes-content ul { padding-left: 20px; margin: 5px 0; }
+        #notes-content li { margin-bottom: 5px; }
+
+        /* 知识点样式 */
+        .knowledge-point {
+            background-color: #e7f3ff;
+            color: #0056b3;
+            padding: 2px 5px;
+            border-radius: 4px;
+            border-bottom: 1px dashed #007bff;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            font-weight: 500;
+        }
+        .knowledge-point:hover {
+            background-color: #007bff;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        /* ============ 操作按钮样式 ============ */
+        .action-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 8px;
+            transition: background-color 0.2s;
+        }
+        .action-btn:hover {
+            background-color: #5a6268;
+        }
+        /* 模态框里的复制按钮稍微调整一下 */
+        .modal-header .action-btn {
+            margin-right: 15px;
+        }
+
+        /* 模态框样式 */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-container { background: white; border-radius: 8px; z-index: 1001; width: 360px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; }
+        .modal-title { margin: 0; font-size: 1.1em; }
+        .modal-close-btn { background: none; border: none; font-size: 24px; cursor: pointer; padding: 0; line-height: 1; }
+        .modal-body { padding: 15px; overflow-y: auto; line-height: 1.6; }
+
+        /* 加载动画 */
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-<h3>AI 视频笔记助手</h3>
-<button id="generateButton">生成笔记</button>
-<div id="status"></div>
+<div class="container">
+    <h3>AI 视频笔记助手</h3>
+    <!-- 【新增】笔记操作按钮容器 -->
+    <div id="noteActions" style="display: none; text-align: right; margin-bottom: 10px;">
+        <button class="action-btn" id="copyNoteBtn">复制笔记</button>
+        <button class="action-btn" id="exportMdBtn">导出 .md</button>
+    </div>
+    <button id="generateButton">生成笔记</button>
+    <div id="status"></div>
 
-<!-- 新增的结果展示区域 -->
-<div id="resultContainer">
-    <h4 id="noteTitle"></h4>
-    <p id="noteSummary"></p>
-    <div id="detailedNotes"></div>
+    <div id="resultContainer">
+        <div id="notes-content"></div>
+    </div>
 </div>
+
+<!-- AI 对话模态框 -->
+<div class="modal" id="ai-modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-container">
+        <div class="modal-header">
+            <h4 class="modal-title"></h4>
+            <button class="action-btn" id="copyAnswerBtn">复制回答</button>
+            <button class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body"></div>
+    </div>
+</div>
+
+<!--
+  脚本引用部分
+  请根据你的选择，保留下面两种方式中的一种。
+-->
+
+<!-- 方式一：使用本地文件 (推荐) -->
+<script src="marked.min.js"></script>
+
+<!-- 方式二：使用 CDN (需要正确配置 manifest.json 的 CSP) -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> -->
 
 <script src="popup.js"></script>
 </body>

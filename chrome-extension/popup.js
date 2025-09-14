@@ -1,131 +1,279 @@
-// popup.js (Final Production Version)
+// popup.js
 
-// 我们把事件监听函数改成 async 函数，这样就可以在里面使用 await
-document.getElementById('generateButton').addEventListener('click', async () => {
+// 全局变量，用于存储原始的Markdown笔记内容和视频URL
+let rawMarkdownNote = '';
+let currentVideoUrl = ''; // 用于导出时的 source
+
+// ================== 全局事件监听 ==================
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('generateButton').addEventListener('click', onGenerateButtonClick);
+
+    // 为新按钮绑定事件
+    document.getElementById('copyNoteBtn').addEventListener('click', copyNote);
+    document.getElementById('exportMdBtn').addEventListener('click', exportMarkdown);
+    document.getElementById('copyAnswerBtn').addEventListener('click', copyAnswer);
+});
+
+
+// ================== 主要功能函数 ==================
+async function onGenerateButtonClick() {
     const button = document.getElementById('generateButton');
     const statusDiv = document.getElementById('status');
     const resultContainer = document.getElementById('resultContainer');
+    const noteActions = document.getElementById('noteActions');
 
-    // 初始化界面
     button.disabled = true;
     statusDiv.textContent = '初始化...';
     resultContainer.style.display = 'none';
+    noteActions.style.display = 'none'; // 确保操作按钮也隐藏
 
     try {
-        // --- 1. 获取标签页 URL (使用 await，代码更简洁) ---
         statusDiv.textContent = '正在获取页面信息...';
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) throw new Error('无法获取当前标签页！');
 
-        if (!tabs || tabs.length === 0) {
-            throw new Error('无法获取当前标签页！');
+        const videoUrl = tab.url;
+        currentVideoUrl = videoUrl; // 保存当前视频 URL
+
+        if (!videoUrl.includes("bilibili.com/video") && !videoUrl.includes("youtube.com/watch")) {
+            throw new Error('目前仅支持Bilibili和YouTube视频页面！');
         }
 
-        const videoUrl = tabs[0].url;
-        if (!videoUrl.includes("youtube.com/watch") && !videoUrl.includes("bilibili.com/video")) {
-            throw new Error('请在支持的视频页面使用！');
-        }
-
-        // --- 2. 发送生成请求 ---
         statusDiv.textContent = '已获取 URL，正在创建任务...';
         const requestData = { userId: 1, url: videoUrl, mode: "FLASH" };
-
         const generateResponse = await fetch('http://localhost:8080/api/notes/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData),
         });
-
-        if (!generateResponse.ok) {
-            throw new Error(`创建任务失败: ${generateResponse.statusText}`);
-        }
+        if (!generateResponse.ok) throw new Error(`创建任务失败: ${generateResponse.statusText}`);
 
         const taskData = await generateResponse.json();
         const taskId = taskData.taskId;
 
-        // --- 3. 开始轮询 ---
-        statusDiv.textContent = `任务已创建 (ID: ${taskId.substring(0, 8)})... 正在处理中...`;
-        await pollTaskStatus(taskId);
+        statusDiv.textContent = `任务已创建... 正在处理中...`;
+        await pollTaskStatusAndRender(taskId);
 
     } catch (error) {
         handleError(error);
     } finally {
         button.disabled = false;
     }
-});
+}
 
-// 轮询函数
-async function pollTaskStatus(taskId) {
+async function pollTaskStatusAndRender(taskId) {
     const statusDiv = document.getElementById('status');
-
-    // 设置一个最长轮询时间，比如 5 分钟，防止无限循环
-    const maxAttempts = 60; // 60次 * 5秒/次 = 300秒 = 5分钟
+    const maxAttempts = 60;
     let attempt = 0;
 
     while (attempt < maxAttempts) {
         attempt++;
         const response = await fetch(`http://localhost:8080/api/tasks/${taskId}/status`);
-        if (!response.ok) {
-            throw new Error('查询状态失败！');
-        }
+    if (!response.ok) throw new Error('查询状态失败！');
 
-        const task = await response.json();
-        statusDiv.textContent = `状态(${attempt}/${maxAttempts}): ${task.statusMessage}`;
+const task = await response.json();
+statusDiv.textContent = `处理中 (${attempt}/${maxAttempts}): ${task.statusMessage}`;
 
-        if (task.status === 'COMPLETED') {
-            statusDiv.textContent = '笔记生成成功！正在获取结果...';
-            await fetchAndRenderResult(taskId);
-            return; // 成功，退出循环
-        } else if (task.status === 'FAILED') {
-            throw new Error(`任务处理失败: ${task.statusMessage}`);
-        }
-
-        // 等待 5 秒
-        await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-
-    throw new Error("任务处理超时，请稍后再试。");
+if (task.status === 'COMPLETED') {
+    statusDiv.textContent = '笔记生成成功！正在渲染结果...';
+    await fetchAndRenderResult(taskId);
+    return;
+} else if (task.status === 'FAILED') {
+    throw new Error(`任务处理失败: ${task.statusMessage}`);
 }
 
-// 获取并渲染结果的函数
+await new Promise(resolve => setTimeout(resolve, 5000));
+}
+throw new Error("任务处理超时，请稍后再试。");
+}
+
 async function fetchAndRenderResult(taskId) {
     const response = await fetch(`http://localhost:8080/api/tasks/${taskId}/result`);
-    if (!response.ok) {
-        throw new Error('获取最终结果失败！');
-    }
+    if (!response.ok) throw new Error('获取最终结果失败！');
 
     const note = await response.json();
-    if (!note || !note.content) {
-        throw new Error('获取到的笔记内容为空！');
-    }
+    if (!note || !note.content) throw new Error('获取到的笔记内容为空！');
 
-    const noteContent = JSON.parse(note.content);
+    const noteData = JSON.parse(note.content);
+    if (!noteData || !Array.isArray(noteData.notes)) throw new Error('笔记内容格式不正确。');
 
-    document.getElementById('noteTitle').textContent = noteContent.title;
-    document.getElementById('noteSummary').textContent = noteContent.summary;
+    const container = document.getElementById('notes-content');
+    container.innerHTML = '';
 
-    const detailedNotesDiv = document.getElementById('detailedNotes');
-    detailedNotesDiv.innerHTML = '';
+    rawMarkdownNote = ''; // 重置
+    let currentList = null;
 
-    noteContent.detailed_notes.forEach(topic => {
-        const topicElement = document.createElement('div');
-        topicElement.className = 'topic';
-        topicElement.textContent = topic.topic;
+    noteData.notes.forEach(block => {
+        if (block.type !== 'list_item' && currentList) {
+            container.appendChild(currentList);
+            currentList = null;
+        }
 
-        const pointsList = document.createElement('ul');
-        topic.points.forEach(point => {
-            const pointElement = document.createElement('li');
-            pointElement.textContent = point;
-            pointsList.appendChild(pointElement);
-        });
+        let element;
+        const content = block.content;
 
-        detailedNotesDiv.appendChild(topicElement);
-        detailedNotesDiv.appendChild(pointsList);
+        switch (block.type) {
+            case 'heading':
+                element = document.createElement('h2');
+                element.innerHTML = marked.parseInline(String(content || ''));
+                container.appendChild(element);
+                rawMarkdownNote += `## ${content}\n\n`;
+                break;
+            case 'paragraph':
+                element = document.createElement('p');
+                element.innerHTML = marked.parseInline(String(content || ''));
+                container.appendChild(element);
+                rawMarkdownNote += `${content}\n\n`;
+                break;
+            case 'list_item':
+                if (!currentList) currentList = document.createElement('ul');
+                element = document.createElement('li');
+                element.innerHTML = marked.parseInline(String(content || ''));
+                currentList.appendChild(element);
+                rawMarkdownNote += `* ${content}\n`;
+                break;
+            case 'knowledge_point':
+                element = createKnowledgePointElement(content);
+                const p = document.createElement('p');
+                p.appendChild(element);
+                container.appendChild(p);
+                rawMarkdownNote += `> **${content.term}**: ${content.explanation}\n\n`;
+                break;
+        }
     });
 
+    if (currentList) {
+        container.appendChild(currentList);
+        rawMarkdownNote += '\n';
+    }
+
+    document.getElementById('noteActions').style.display = 'block';
     document.getElementById('resultContainer').style.display = 'block';
+    document.getElementById('status').textContent = '笔记已生成！';
 }
 
-// 统一的错误处理函数
+
+// ================== 复制/导出/对话 功能函数 ==================
+
+function copyNote() {
+    navigator.clipboard.writeText(rawMarkdownNote)
+        .then(() => {
+            const btn = document.getElementById('copyNoteBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '已复制!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+        })
+        .catch(err => {
+            console.error('复制失败: ', err);
+            alert('复制失败，请检查浏览器权限。');
+        });
+}
+
+/**
+ * 【最终优化版】
+ * 将笔记导出为 Markdown 文件，并在文件头部添加 Frontmatter 元数据。
+ */
+function exportMarkdown() {
+    // 1. 自动生成标签
+    const tags = new Set();
+    const keywords = ['Spring AI', 'LangChain', 'Spring Boot', 'Java', 'AI', 'RAG', 'LLM', '多模态', '数据库'];
+    keywords.forEach(keyword => {
+        if (rawMarkdownNote.toLowerCase().includes(keyword.toLowerCase())) {
+            tags.add(keyword.replace(/\s/g, '-')); // 替换空格为-
+        }
+    });
+
+    // 2. 构建 Frontmatter 字符串
+    const frontmatter = `---
+source: ${currentVideoUrl}
+generated_at: ${new Date().toISOString().split('T')[0]}
+tags:
+${Array.from(tags).map(tag => `  - ${tag}`).join('\n')}
+---
+
+`;
+
+    // 3. 合并内容
+    const markdownContent = frontmatter + rawMarkdownNote;
+
+    // 4. 创建并触发下载
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const title = rawMarkdownNote.split('\n')[0].replace('## ', '').trim() || 'ai-video-note';
+    a.download = `${title}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function copyAnswer() {
+    const modalBody = document.getElementById('ai-modal').querySelector('.modal-body');
+    const answerText = modalBody.innerText;
+    navigator.clipboard.writeText(answerText)
+        .then(() => {
+            const btn = document.getElementById('copyAnswerBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '已复制!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+        })
+        .catch(err => {
+            console.error('复制回答失败: ', err);
+            alert('复制失败！');
+        });
+}
+
+function createKnowledgePointElement(knowledgePointData) {
+    const element = document.createElement('span');
+    element.className = 'knowledge-point';
+    element.textContent = knowledgePointData.term;
+    element.title = knowledgePointData.explanation;
+
+    element.addEventListener('click', async () => {
+        const term = knowledgePointData.term;
+        const context = document.getElementById('notes-content').innerText;
+        showModal(`正在解释: ${term}`, '<div class="spinner"></div>');
+        try {
+            const response = await fetch('http://localhost:8080/api/ai/explain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ term, context }),
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.answer || 'AI 服务响应错误');
+            }
+            const data = await response.json();
+            const htmlContent = marked.parse(data.answer);
+            updateModalContent(htmlContent);
+        } catch (error) {
+            updateModalContent(`<p style="color: red;">抱歉，无法获取解释：<br>${error.message}</p>`);
+        }
+    });
+    return element;
+}
+
+function showModal(title, contentHtml) {
+    const modal = document.getElementById('ai-modal');
+    const modalTitle = modal.querySelector('.modal-title');
+    const modalBody = modal.querySelector('.modal-body');
+    const closeBtn = modal.querySelector('.modal-close-btn');
+    const overlay = modal.querySelector('.modal-overlay');
+    modalTitle.textContent = title;
+    modalBody.innerHTML = contentHtml;
+    const closeModal = () => modal.style.display = 'none';
+    closeBtn.onclick = closeModal;
+    overlay.onclick = closeModal;
+    modal.style.display = 'flex';
+}
+
+function updateModalContent(contentHtml) {
+    const modalBody = document.getElementById('ai-modal').querySelector('.modal-body');
+    modalBody.innerHTML = contentHtml;
+}
+
 function handleError(error) {
     console.error('An error occurred:', error);
     document.getElementById('status').textContent = `发生错误: ${error.message}`;

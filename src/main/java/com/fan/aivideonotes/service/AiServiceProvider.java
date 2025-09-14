@@ -20,4 +20,6 @@ public interface AiServiceProvider {
      */
     boolean supports(Optional<String> userApiKey);
 
+
+
 }
