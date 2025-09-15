@@ -2,8 +2,10 @@
 
 [![Java](https://img.shields.io/badge/Java-21-blue.svg)](https://www.java.com)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-v1.1.0-brightgreen?logo=google-chrome&logoColor=white)](https://www.google.com/chrome/)
+[![Edge Add-ons](https://img.shields.io/badge/Edge-v1.1.0-blue?logo=microsoft-edge&logoColor=white)](https://www.microsoft.com/edge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/fan2515/ai-video-notes/blob/main/LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-blue.svg)](https://github.com/fan2515/ai-video-notes/releases)
+[![Version](https://img.shields.io/badge/Version-1.1.0-blue.svg)](https://github.com/fan2515/ai-video-notes/releases/tag/v1.1.0)
 
 **一个从零到一，攻克无数真实世界工程难题，最终实现的全功能、全栈 AI 视频笔记应用原型。**
 
@@ -34,7 +36,7 @@
 
 ### ✨ 项目亮点与技术深度 (Features & Technical Depth)
 
-这个项目不仅是一个功能应用，更是一次深入真实世界后端开发的完整实践。
+这个项目不仅仅是一个功能应用，更是一次深入真实世界后端开发的完整实践。
 
 *   **沉浸式学习体验**:
     *   **持久化侧边栏 (Persistent Side Panel):** 彻底抛弃临时弹窗，将笔记固定在浏览器侧边，实现了视频与笔记同屏学习，避免了焦点丢失导致的中断。
@@ -51,10 +53,9 @@
 *   **前沿多模态 AI 集成**: 直接利用 **Google Gemini 1.5** 的**多模态能力**，一步到位地完成了从音频到结构化文本的转换。
 
 *   **专业的工程与架构实践**:
-    *   **异步任务管理**: 实现了包含 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 状态的**异步任务管理系统**，并通过 API 提供了任务状态的**轮询查询**能力。
-    *   **健壮的外部系统集成**: 稳定集成 **`yt-dlp`** 和 **`ffmpeg`**，实现了对在线视频的下载和处理。
-    *   **JPA 深度应用**: 解决了因**懒加载 (`LAZY`)**、**异步 (`@Async`)** 和**事务 (`@Transactional`)** 共同作用下导致的**数据一致性**难题。
-    *   **单元测试**与**配置安全**: 编写了基于 **JUnit 5 + Mockito** 的**单元测试**；所有敏感信息均通过**环境变量**管理；**Prompt** 从业务代码中分离。
+    *   **异步任务管理**: 实现了包含 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 状态的**异步任务管理系统**。
+    *   **健壮的外部系统集成**: 稳定集成 **`yt-dlp`** 和 **`ffmpeg`**。
+    *   **JPA 深度应用**与**单元测试**及**配置安全**。
 
 ---
 
@@ -66,7 +67,7 @@
 *   **媒体处理**: yt-dlp, FFmpeg
 *   **数据库**: H2 (开发阶段)
 *   **测试**: JUnit 5, Mockito
-*   **前端**: Chrome/Edge Extension (Manifest V3, HTML, CSS, JavaScript)
+*   **前端**: **Chrome & Edge Extension** (Manifest V3, HTML, CSS, JavaScript)
 *   **前端库**: Marked.js (Markdown渲染)
 *   **其他**: Lombok, Jackson, Jasypt
 
@@ -86,9 +87,10 @@
     *   (如果需要) 在 `AiVideoNotesApplication.java` 中配置你的网络代理。
     *   直接运行 `AiVideoNotesApplication.java` 主类。
 
-3.  **加载浏览器插件**
-    *   打开浏览器扩展程序页面 (`chrome://extensions`)，启用**开发者模式**。
-    *   点击“**加载已解压的扩展程序**”，选择项目中的 `chrome-extension` 文件夹。
+3.  **加载浏览器插件 (Chrome / Edge)**
+    *   **Chrome**: 在地址栏输入 `chrome://extensions` 并打开**开发者模式**。
+    *   **Edge**: 在地址栏输入 `edge://extensions` 并打开**开发人员模式**。
+    *   点击“**加载已解压的扩展程序**”，选择项目中的 `extension` 文件夹 (原 `chrome-extension` 文件夹)。
 
 4.  **开始使用！**
     *   打开任意 Bilibili 视频页面，点击浏览器右上角的**插件图标**，**AI 笔记侧边栏**将会滑出。
