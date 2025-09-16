@@ -93,16 +93,39 @@
 
         /* 加载动画 */
         .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .form-group label { font-size: 14px; color: #555; }
+        .form-group select {
+            padding: 5px 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            width: 200px;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 <div class="container">
     <h3>AI 视频笔记助手</h3>
-    <!-- 【新增】笔记操作按钮容器 -->
+    <!-- 笔记操作按钮容器 -->
     <div id="noteActions" style="display: none; text-align: right; margin-bottom: 10px;">
         <button class="action-btn" id="copyNoteBtn">复制笔记</button>
         <button class="action-btn" id="exportMdBtn">导出 .md</button>
+    </div>
+    <!-- 模型选择下拉框 -->
+    <div class="form-group">
+        <label for="modelSelect">选择模型:</label>
+        <select id="modelSelect">
+            <option value="FLASH" selected>Gemini 1.5 Flash (速度快)</option>
+            <option value="PRO">Gemini 1.5 Pro (质量高)</option>
+        </select>
     </div>
     <button id="generateButton">生成笔记</button>
     <div id="status"></div>

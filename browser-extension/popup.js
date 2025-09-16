@@ -40,7 +40,23 @@ async function onGenerateButtonClick() {
         }
 
         statusDiv.textContent = '已获取 URL，正在创建任务...';
-        const requestData = { userId: 1, url: videoUrl, mode: "FLASH" };
+
+        // ========================= 【核心修改点】 =========================
+
+        // 1. 从下拉框获取用户选择的模型
+        const selectedMode = document.getElementById('modelSelect').value;
+
+        // 2. 在构建请求体时，使用上面获取到的 selectedMode
+        const requestData = {
+            userId: 1,
+            url: videoUrl,
+            mode: selectedMode // 不再写死 "FLASH"
+        };
+
+        // =================================================================
+
+        console.log("Sending request to backend with data:", requestData); // 加一行日志，方便调试
+
         const generateResponse = await fetch('http://localhost:8080/api/notes/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -60,7 +76,6 @@ async function onGenerateButtonClick() {
         button.disabled = false;
     }
 }
-
 async function pollTaskStatusAndRender(taskId) {
     const statusDiv = document.getElementById('status');
     const maxAttempts = 60;

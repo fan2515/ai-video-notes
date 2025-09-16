@@ -1,8 +1,13 @@
 package com.fan.aivideonotes.service;
 
+import com.fan.aivideonotes.controller.dto.VideoLinkRequest;
+
+import java.io.File;
 import java.util.Optional;
 
 public interface AiServiceProvider {
+
+    String generateNotesFromAudio(File audioFile, VideoLinkRequest.GenerationMode mode);
 
     /**
      * 根据文本记录生成笔记.

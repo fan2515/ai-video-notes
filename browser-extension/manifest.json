@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI 视频笔记助手",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "一键生成视频的AI笔记，并固定在侧边栏方便查阅。",
 
 
