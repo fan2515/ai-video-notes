@@ -40,8 +40,8 @@ public class AiVideoNotesApplication {
         int proxyPort = 7897;
         Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
         requestFactory.setProxy(proxy);
-        requestFactory.setConnectTimeout(10000);
-        requestFactory.setReadTimeout(60000);
+        requestFactory.setConnectTimeout(60 * 1000);
+        requestFactory.setReadTimeout(5 * 60 * 1000);
         System.out.println("!!! RestTemplate is configured with proxy and timeouts !!!");
         return new RestTemplate(requestFactory);
     }

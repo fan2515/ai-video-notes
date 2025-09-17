@@ -35,34 +35,41 @@ async function onGenerateButtonClick() {
         const videoUrl = tab.url;
         currentVideoUrl = videoUrl; // 保存当前视频 URL
 
-        if (!videoUrl.includes("bilibili.com/video") && !videoUrl.includes("youtube.com/watch")) {
-            throw new Error('目前仅支持Bilibili和YouTube视频页面！');
-        }
-
-        statusDiv.textContent = '已获取 URL，正在创建任务...';
-
         // ========================= 【核心修改点】 =========================
 
-        // 1. 从下拉框获取用户选择的模型
-        const selectedMode = document.getElementById('modelSelect').value;
+        // 1. 【新增】在使用 videoUrl 之前，进行健壮性检查
+        if (!videoUrl) {
+            throw new Error('无法获取页面URL，请在正常的网页(如Bilibili)上使用。');
+        }
 
-        // 2. 在构建请求体时，使用上面获取到的 selectedMode
-        const requestData = {
-            userId: 1,
-            url: videoUrl,
-            mode: selectedMode // 不再写死 "FLASH"
-        };
+        // 2. 【修改】将原来的 if 判断整合进来
+        const supportedHosts = ["bilibili.com/video", "youtube.com/watch"];
+        if (!supportedHosts.some(host => videoUrl.includes(host))) {
+            throw new Error('请在支持的视频页面（Bilibili, YouTube）使用！');
+        }
 
         // =================================================================
 
-        console.log("Sending request to backend with data:", requestData); // 加一行日志，方便调试
+        statusDiv.textContent = '已获取 URL，正在创建任务...';
+
+        const selectedMode = document.getElementById('modelSelect').value;
+        const requestData = {
+            userId: 1,
+            url: videoUrl,
+            mode: selectedMode
+        };
+
+        console.log("Sending request to backend with data:", requestData);
 
         const generateResponse = await fetch('http://localhost:8080/api/notes/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData),
         });
-        if (!generateResponse.ok) throw new Error(`创建任务失败: ${generateResponse.statusText}`);
+        if (!generateResponse.ok) {
+            const errorText = await generateResponse.text();
+            throw new Error(`创建任务失败: ${generateResponse.statusText} - ${errorText}`);
+        }
 
         const taskData = await generateResponse.json();
         const taskId = taskData.taskId;
