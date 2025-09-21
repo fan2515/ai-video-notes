@@ -33,4 +33,4 @@ build/
 .vscode/
 
 # Ignore sensitive cookie files
-*.txt
+#*.txt
