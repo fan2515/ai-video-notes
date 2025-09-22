@@ -6,4 +6,5 @@ import lombok.Data;
 public class ExplainRequest {
     private String term;    // 被点击的知识点
     private String context; // 笔记的上下文
+    private String shortExplanation;
 }

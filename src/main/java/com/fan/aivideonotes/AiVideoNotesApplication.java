@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.hibernate6.Hibernate6Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -17,6 +18,9 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.transport.ProxyProvider;
+import com.zaxxer.hikari.HikariDataSource; // 导入
+import javax.sql.DataSource; // 导入
+
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -44,6 +48,20 @@ public class AiVideoNotesApplication {
         requestFactory.setReadTimeout(5 * 60 * 1000);
         System.out.println("!!! RestTemplate is configured with proxy and timeouts !!!");
         return new RestTemplate(requestFactory);
+    }
+
+    @Bean
+    public DataSource dataSource() {
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setDriverClassName("org.postgresql.Driver");
+        dataSource.setJdbcUrl("jdbc:postgresql://localhost:5432/ai_video_notes_db");
+        dataSource.setUsername("postgres");
+
+        // 【核心】直接在这里硬编码密码！
+        dataSource.setPassword("123456");
+
+        System.out.println("--- Using Hardcoded DataSource Configuration ---");
+        return dataSource;
     }
 
     // 2. ObjectMapper Bean (带 JSR310 模块)
@@ -78,5 +96,6 @@ public class AiVideoNotesApplication {
             }
         };
     }
+
 
 }

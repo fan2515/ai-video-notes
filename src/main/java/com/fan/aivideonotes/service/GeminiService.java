@@ -111,12 +111,12 @@ public class GeminiService implements AiServiceProvider {
     }
 
     /**
-     * 解析来自Gemini API的原始JSON响应字符串。
-     * 此方法旨在提取AI生成的笔记内容，进行清理，并验证其是否为有效的JSON格式。
+     * 【V1.2.1 修复版】
+     * 解析、验证并【智能修正】来自Gemini API的JSON响应。
      *
      * @param jsonResponse Gemini API返回的原始JSON字符串
-     * @return 清理和验证后的、代表笔记结构的JSON字符串
-     * @throws IOException 如果响应为空、格式无效、包含API错误，或AI未按要求返回有效的JSON内容
+     * @return 一个保证顶级结构是 {"notes": [...]} 的、清理和验证后的JSON字符串
+     * @throws IOException 如果响应为空、格式无效或包含API错误
      */
     private String parseGeminiResponse(String jsonResponse) throws IOException {
         if (jsonResponse == null || jsonResponse.isBlank()) {
@@ -127,53 +127,56 @@ public class GeminiService implements AiServiceProvider {
         System.out.println(jsonResponse);
         System.out.println("======================================");
 
-        JsonNode root;
-        try {
-            root = objectMapper.readTree(jsonResponse);
-        } catch (IOException e) {
-            // 如果Gemini返回的不是一个合法的JSON，记录错误并抛出
-            System.err.println("Failed to parse Gemini response as JSON.");
-            throw new IOException("Gemini returned invalid JSON: " + jsonResponse, e);
-        }
+        JsonNode root = objectMapper.readTree(jsonResponse);
 
-        // 检查是否有错误信息，例如 API Key 无效或请求格式错误
         if (root.has("error")) {
             String errorMessage = root.path("error").path("message").asText("Unknown error");
             throw new IOException("Gemini API returned an error: " + errorMessage);
         }
 
-        // 检查 candidates 数组是否存在且不为空
         JsonNode candidates = root.path("candidates");
         if (candidates.isMissingNode() || !candidates.isArray() || candidates.isEmpty()) {
-            // 有时内容会被安全过滤器拦截，导致 candidates 为空。我们检查具体原因。
             String finishReason = root.path("promptFeedback").path("blockReason").asText("unknown reason");
             throw new IOException("Gemini response is missing 'candidates'. Generation may have been blocked for reason: " + finishReason);
         }
 
-        // 定位到我们需要的文本内容
         JsonNode textNode = candidates.path(0).path("content").path("parts").path(0).path("text");
-
         if (textNode.isMissingNode() || !textNode.isTextual()) {
             throw new IOException("Could not find 'text' field in a valid Gemini response structure.");
         }
 
         String rawText = textNode.asText();
-        System.out.println("Extracted raw text from AI: " + rawText);
-
-        // 清理AI可能额外添加的Markdown代码块标记
-        // 使用 trim() 去除首尾空白，然后用正则表达式替换
         String cleanedJson = rawText.trim().replaceAll("^```json\\s*", "").replaceAll("\\s*```$", "");
 
-        // 【关键验证】在返回前，验证清理后的字符串本身是否是一个有效的JSON
+        // ========================= 【核心修正逻辑】 =========================
+
+        // 1. 先尝试将清理过的文本解析成通用的 JsonNode
+        JsonNode rootNode;
         try {
-            objectMapper.readTree(cleanedJson);
-            System.out.println("Cleaned text is a valid JSON. Ready to be saved.");
+            rootNode = objectMapper.readTree(cleanedJson);
         } catch (IOException e) {
             System.err.println("The cleaned text from AI is NOT a valid JSON: " + cleanedJson);
             throw new IOException("AI did not return a valid JSON string as requested by the prompt.", e);
         }
 
-        // 返回最终纯净的、代表笔记内容的JSON字符串
+        // 2. 检查顶级结构是不是一个数组
+        if (rootNode.isArray()) {
+            System.out.println("AI returned a root array. Wrapping it into the correct {'notes': ...} structure.");
+
+            // 如果是数组，我们就手动用 Map 构建一个包装对象
+            Map<String, JsonNode> wrapper = Map.of("notes", rootNode);
+
+            // 将修正后的对象，重新序列化为字符串
+            cleanedJson = objectMapper.writeValueAsString(wrapper);
+
+        } else if (rootNode.isObject() && !rootNode.has("notes")) {
+            // 这是一个健壮性检查，防止AI返回了其他奇怪的JSON对象
+            throw new IOException("AI returned a valid JSON object but is missing the required top-level 'notes' key.");
+        }
+
+        // ====================================================================
+
+        System.out.println("Cleaned and validated JSON is ready to be saved: " + cleanedJson);
         return cleanedJson;
     }
 
