@@ -22,28 +22,38 @@ public class AiController {
         this.aiInteractionService = aiInteractionService;
     }
 
+    /**
+     * [重构后]
+     * 处理术语解释的请求。
+     * 它现在可以接收 provider 字段来动态选择 AI 模型。
+     */
     @PostMapping("/explain")
     public ResponseEntity<ExplainResponse> getExplanation(@RequestBody ExplainRequest request) {
-        // 【新增】输入校验
-        if (request.getTerm() == null || request.getTerm().isBlank() ||
-                request.getShortExplanation() == null) { // shortExplanation 可以为空字符串，但不能为 null
+        // 输入校验保持不变
+        if (request.getTerm() == null || request.getTerm().isBlank()) {
             return ResponseEntity.badRequest()
-                    .body(new ExplainResponse("请求参数不完整: term 和 shortExplanation 是必需的。"));
+                    .body(new ExplainResponse("请求参数不完整: 'term' 是必需的。"));
         }
 
         try {
-            // 【修改】将所有三个参数都传递给 Service
+            // 调用重构后的 Service 方法，并传入 provider
+            // 注意：request.getProvider() 此时可能为 null，Service 层的工厂类会处理这种情况
             String answer = aiInteractionService.getExplanation(
                     request.getTerm(),
                     request.getShortExplanation(),
-                    request.getContext()
+                    request.getContext(),
+                    request.getProvider() // 将 provider 传递下去
             );
             return ResponseEntity.ok(new ExplainResponse(answer));
 
+        } catch (UnsupportedOperationException e) {
+            // 捕获模型不支持操作的特定异常
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ExplainResponse("选择的模型不支持此操作: " + e.getMessage()));
         } catch (Exception e) {
-            e.printStackTrace(); // 在开发时打印完整错误，方便调试
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ExplainResponse("抱歉，AI解释服务出现内部错误：" + e.getMessage()));
+                    .body(new ExplainResponse("AI解释服务出现内部错误: " + e.getMessage()));
         }
     }
 }

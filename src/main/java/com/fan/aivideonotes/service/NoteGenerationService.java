@@ -5,9 +5,9 @@ import com.fan.aivideonotes.model.Note;
 import com.fan.aivideonotes.model.Task;
 import com.fan.aivideonotes.repository.NoteRepository;
 import com.fan.aivideonotes.repository.TaskRepository;
+import com.fan.aivideonotes.service.llm.LLMService; // 【注意】导入新的接口
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,26 +16,34 @@ import java.io.File;
 @Service
 public class NoteGenerationService {
 
-    private final AiServiceProvider geminiProvider;
+    // 注入新的 LLMServiceProvider
+    private final LLMServiceProvider llmServiceProvider;
     private final NoteRepository noteRepository;
     private final VideoProcessingService videoProcessingService;
-    private final TaskRepository taskRepository; // 注入 TaskRepository
+    private final TaskRepository taskRepository;
 
     @Autowired
-    public NoteGenerationService(@Qualifier("geminiService") AiServiceProvider geminiProvider,
+    public NoteGenerationService(LLMServiceProvider llmServiceProvider,
                                  NoteRepository noteRepository,
                                  VideoProcessingService videoProcessingService,
-                                 TaskRepository taskRepository) { // 在构造函数中接收
-        this.geminiProvider = geminiProvider;
+                                 TaskRepository taskRepository) {
+        this.llmServiceProvider = llmServiceProvider;
         this.noteRepository = noteRepository;
         this.videoProcessingService = videoProcessingService;
         this.taskRepository = taskRepository;
     }
 
-    // 方法签名现在需要接收 taskId
+    /**
+     * [重构后]
+     * 异步为视频生成笔记。
+     * 此方法现在通过 LLMServiceProvider 动态选择 AI 模型。
+     *
+     * @param taskId      任务的唯一ID
+     * @param request     包含视频URL、用户ID、模式等信息的请求对象
+     */
     @Async("taskExecutor")
     @Transactional
-    public void generateNotesForVideo(String taskId, Long userId, String videoUrl, VideoLinkRequest.GenerationMode mode) {
+    public void generateNotesForVideo(String taskId, VideoLinkRequest request) {
 
         updateTaskStatus(taskId, "PROCESSING", "Starting video processing...");
 
@@ -45,24 +53,27 @@ public class NoteGenerationService {
 
         try {
             updateTaskStatus(taskId, "PROCESSING", "Step 1: Downloading video from URL...");
-            videoFile = videoProcessingService.downloadVideo(videoUrl);
+            videoFile = videoProcessingService.downloadVideo(request.getUrl());
             tempDirectory = videoFile.getParentFile();
 
             updateTaskStatus(taskId, "PROCESSING", "Step 2: Extracting audio...");
             audioFile = videoProcessingService.extractAudio(videoFile);
 
             updateTaskStatus(taskId, "PROCESSING", "Step 3: Generating notes from audio with AI...");
-            String generatedNotes = ((GeminiService) geminiProvider).generateNotesFromAudio(audioFile, mode);
+
+            // 通过 provider 动态获取 LLM 服务并调用
+            // 注意：request.getProvider() 暂时可能为 null，工厂类会返回默认的 "GEMINI"
+            LLMService selectedLlmService = llmServiceProvider.getProvider(request.getProvider());
+            String generatedNotes = selectedLlmService.generateNotesFromAudio(audioFile, request);
 
             updateTaskStatus(taskId, "PROCESSING", "Step 4: Saving generated notes to the database...");
             Note note = new Note();
-            note.setUserId(userId);
-            note.setVideoUrl(videoUrl);
+            note.setUserId(request.getUserId());
+            note.setVideoUrl(request.getUrl());
             note.setContent(generatedNotes);
             Note savedNote = noteRepository.save(note);
 
-            // 最终成功，更新 Task 状态并关联 Note
-            Task finalTask = taskRepository.findById(taskId).orElseThrow();
+            Task finalTask = taskRepository.findById(taskId).orElseThrow(() -> new IllegalStateException("Task not found with id: " + taskId));
             finalTask.setStatus("COMPLETED");
             finalTask.setStatusMessage("Note generated successfully.");
             finalTask.setResultNote(savedNote);
@@ -72,7 +83,6 @@ public class NoteGenerationService {
         } catch (Exception e) {
             System.err.println("An error occurred during the pipeline for task " + taskId + ": " + e.getMessage());
             e.printStackTrace();
-            // 任务失败，更新 Task 状态
             updateTaskStatus(taskId, "FAILED", e.getMessage());
         } finally {
             if (tempDirectory != null && tempDirectory.exists()) {
@@ -82,20 +92,14 @@ public class NoteGenerationService {
         }
     }
 
-    // 一个辅助方法，用于更新任务状态
     private void updateTaskStatus(String taskId, String status, String message) {
-        // 使用 .orElse(new Task()) 可以在任务不存在时创建一个新的
-        Task task = taskRepository.findById(taskId).orElse(new Task());
-        task.setId(taskId); // 确保 ID 被设置
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalStateException("Attempted to update a non-existent task with id: " + taskId));
         task.setStatus(status);
         task.setStatusMessage(message);
         taskRepository.save(task);
     }
 
-    /**
-     * 递归删除目录及其所有内容.
-     * @param directory 要删除的目录
-     */
     private void deleteDirectory(File directory) {
         File[] allContents = directory.listFiles();
         if (allContents != null) {

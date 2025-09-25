@@ -5,6 +5,7 @@ import com.fan.aivideonotes.model.Note;
 import com.fan.aivideonotes.model.Task;
 import com.fan.aivideonotes.repository.NoteRepository;
 import com.fan.aivideonotes.repository.TaskRepository;
+import com.fan.aivideonotes.service.llm.GeminiService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

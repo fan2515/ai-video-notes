@@ -1,5 +1,6 @@
 package com.fan.aivideonotes;
 
+import org.springframework.retry.annotation.EnableRetry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.hibernate6.Hibernate6Module;
@@ -27,6 +28,7 @@ import java.net.Proxy;
 
 @SpringBootApplication
 @EnableAsync
+@EnableRetry
 public class AiVideoNotesApplication {
 
     public static void main(String[] args) {

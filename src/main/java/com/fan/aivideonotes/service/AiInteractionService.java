@@ -2,8 +2,8 @@ package com.fan.aivideonotes.service;
 
 import com.fan.aivideonotes.model.GlossaryTerm;
 import com.fan.aivideonotes.repository.GlossaryTermRepository;
+import com.fan.aivideonotes.service.llm.LLMService; // 【注意】导入新的接口
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,49 +12,61 @@ import java.util.Optional;
 @Service
 public class AiInteractionService {
 
-    private final AiServiceProvider geminiProvider;
-    private final GlossaryTermRepository glossaryRepository; // 【新增】注入
+    // 注入新的 LLMServiceProvider
+    private final LLMServiceProvider llmServiceProvider;
+    private final GlossaryTermRepository glossaryRepository;
 
     @Autowired
-    public AiInteractionService(@Qualifier("geminiService") AiServiceProvider geminiProvider,
-                                GlossaryTermRepository glossaryRepository) { // 【新增】
-        this.geminiProvider = geminiProvider;
-        this.glossaryRepository = glossaryRepository; // 【新增】
+    public AiInteractionService(LLMServiceProvider llmServiceProvider,
+                                GlossaryTermRepository glossaryRepository) {
+        this.llmServiceProvider = llmServiceProvider;
+        this.glossaryRepository = glossaryRepository;
     }
 
     /**
-     * 【V1.3 核心改造】
+     * [重构后]
      * 获取术语的深度解释，实现“缓存优先”策略。
-     * @param term 要解释的术语
+     * 此方法现在通过 LLMServiceProvider 动态选择 AI 模型。
+     *
+     * @param term             要解释的术语
      * @param shortExplanation 术语的简短解释 (用于首次存储)
-     * @param context 笔记上下文
+     * @param context          笔记上下文
+     * @param providerKey      用户选择的模型提供商 (e.g., "GEMINI", "KIMI")
      * @return 高质量的深度解释字符串
      */
-    @Transactional // 增加事务支持，确保数据库操作的原子性
-    public String getExplanation(String term, String shortExplanation, String context) {
-        // 1. 先尝试从数据库（缓存）中查找
+    @Transactional
+    public String getExplanation(String term, String shortExplanation, String context, String providerKey) {
+        // 1. 先尝试从数据库中查找
         Optional<GlossaryTerm> existingTermOpt = glossaryRepository.findByTerm(term);
 
-        if (existingTermOpt.isPresent() && existingTermOpt.get().getLongExplanation() != null) {
-            System.out.println("CACHE HIT: Found explanation for '" + term + "' in database.");
-            return existingTermOpt.get().getLongExplanation();
+        GlossaryTerm termEntity;
+
+        // 【核心修正逻辑】
+        if (existingTermOpt.isPresent()) {
+            termEntity = existingTermOpt.get();
+            // 如果已经存在，并且已经有长解释了，直接返回，不再执行后续操作
+            if (termEntity.getLongExplanation() != null && !termEntity.getLongExplanation().isBlank()) {
+                System.out.println("CACHE HIT: Found explanation for '" + term + "' in database.");
+                return termEntity.getLongExplanation();
+            }
+        } else {
+            // 如果不存在，创建一个新的实例
+            termEntity = new GlossaryTerm();
+            termEntity.setTerm(term);
+            termEntity.setShortExplanation(shortExplanation);
         }
 
-        // 2. 如果数据库中没有，再调用 AI 生成
-        System.out.println("CACHE MISS: Generating new explanation for '" + term + "' via AI.");
+        // 2. 如果代码能执行到这里，说明需要调用 AI 生成
+        System.out.println("CACHE MISS or EXPLANATION NEEDED: Generating new explanation for '" + term + "' via AI.");
         String prompt = buildPrompt(term, context);
-        String longExplanation = geminiProvider.generateNotes(prompt, Optional.empty());
 
-        // 3. 将新生成的解释存入数据库
-        GlossaryTerm termToSave = existingTermOpt.orElseGet(() -> {
-            GlossaryTerm newTerm = new GlossaryTerm();
-            newTerm.setTerm(term);
-            newTerm.setShortExplanation(shortExplanation);
-            return newTerm;
-        });
-        termToSave.setLongExplanation(longExplanation);
-        glossaryRepository.save(termToSave);
-        System.out.println("SAVED: New explanation for '" + term + "' has been saved to the database.");
+        LLMService selectedLlmService = llmServiceProvider.getProvider(providerKey);
+        String longExplanation = selectedLlmService.generateTextResponse(prompt);
+
+        // 3. 将新生成的解释设置到实体上，然后保存（这时JPA会智能判断是 INSERT 还是 UPDATE）
+        termEntity.setLongExplanation(longExplanation);
+        glossaryRepository.save(termEntity);
+        System.out.println("SAVED/UPDATED: Explanation for '" + term + "' has been saved to the database.");
 
         return longExplanation;
     }
@@ -69,7 +81,7 @@ public class AiInteractionService {
                 %s
                 --- 结束 ---
     
-                请你用通俗易懂、循循善诱的方式，向这位学生详细解释 "%s" 是什么。请专注于以下几点：
+                请你用通俗易懂、循循诱导的方式，向这位学生详细解释 "%s" 是什么。请专注于以下几点：
                 1. 它的核心思想或解决了什么问题？
                 2. 为什么在上述笔记的上下文中会提到它？
                 3. (可选) 给出一个简单的例子或比喻来帮助理解。
